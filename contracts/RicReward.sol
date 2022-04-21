@@ -27,13 +27,9 @@ error RicReward__ArrayMismatch();
 /// protocol. Withdrawing the relevant tokens here will decrease or delete the stream as appropriate
 contract RicReward is Ownable {
 
-    /// @dev Emitted when a token is added to the rewards program
+    /// @dev Emitted when a token is added or removed to or from the rewards program
     /// @param token ERC20 token to be staked
-    event RewardActive(address indexed token);
-
-    /// @dev Emitted when a token is removed from the rewards program
-    /// @param token ERC20 token that can no longer be staked
-    event RewrardInactive(address indexed token);
+    event RewardUpdate(address indexed token, bool active);
 
     /// @dev Emitted when token stake gets updated
     /// @param staker Address of staker
@@ -55,9 +51,8 @@ contract RicReward is Ownable {
     /// @dev Tokens available for rewards
     mapping(IERC20 => bool) public rewardActive;
 
-    /// @dev Flow rate to deposit ratio divided by 10. If this value is 2, then the adjustment will
-    /// be `amount * 2 / 100` or `amount * 0.2`
-    uint256 public flowRateDepositRatio = 2;
+    /// @dev Flow rate to deposit ratio divided by 10.
+    uint256 public constant flowRateDepositRatio = 2;
 
     constructor(ISuperfluid host, IConstantFlowAgreementV1 cfa, ISuperToken ric) {
         _cfaLib = CFAv1Library.InitData(host, cfa);
@@ -134,20 +129,13 @@ contract RicReward is Ownable {
         }
     }
 
-    /// @notice Sets the flow rate to deposit ratio
-    /// @param ratio New ratio to replace the old
-    /// @dev MUST be contract owner
-    function setFlowRateDepositRatio(uint256 ratio) external onlyOwner {
-        flowRateDepositRatio = ratio;
-    }
-
     /// @notice Sets a new token to be active
     /// @param token New Token to add to rewards list
-    /// @dev MUST be contract owner. Emits `RewardActive`
-    function setRewardActive(IERC20 token) external onlyOwner {
-        rewardActive[token] = true;
+    /// @dev MUST be contract owner. Emits `RewardUpdate`
+    function setRewardActive(IERC20 token, bool active) external onlyOwner {
+        rewardActive[token] = active;
 
-        emit RewardActive(address(token));
+        emit RewardUpdate(address(token), active);
     }
 
     // ----- ----- ----- ----- ----- ----- ----- ----- ----- ----- ----- ----- ----- ----- -----
@@ -174,7 +162,8 @@ contract RicReward is Ownable {
     }
 
     /// @dev Convenience function to abstract away numeric type casting hell.
-    function _flowRate(uint256 amount) internal view returns (int96) {
-        return int96(int256(amount * flowRateDepositRatio / 100));
+    // TODO double check this
+    function _flowRate(uint256 amount) internal pure returns (int96) {
+        return int96(int256((amount * flowRateDepositRatio / 100) / 30 days));
     }
 }
