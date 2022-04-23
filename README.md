@@ -1,5 +1,7 @@
 # RicReward, A Ricochet super token liquidity staking contract
 
+__STATUS:__ In Development
+
 ## Overview
 
 The system consists of a single contract, `RicReward.sol`, using the Ricochet Token, liquidity
