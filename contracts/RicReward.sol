@@ -40,7 +40,7 @@ contract RicReward is Ownable {
     /// @dev Superfluid CFAv1 library for readability
     using CFAv1Library for CFAv1Library.InitData;
     CFAv1Library.InitData internal _cfaLib;
-    IConstantFlowAgreementV1 internal _cfa;
+    IConstantFlowAgreementV1 internal immutable _cfa;
 
     /// @dev Ricochet Token
     ISuperToken internal _ric;
@@ -63,7 +63,7 @@ contract RicReward is Ownable {
     }
 
     // ----- ----- ----- ----- ----- ----- ----- ----- ----- ----- ----- ----- ----- ----- -----
-    // PUBLIC FUNCTIONS
+    // EXTERNAL FUNCTIONS
     // ----- ----- ----- ----- ----- ----- ----- ----- ----- ----- ----- ----- ----- ----- -----
 
     /// @notice Deposits active rewards token with `approve/transferFrom` pattern, then either
@@ -124,8 +124,11 @@ contract RicReward is Ownable {
         if (tokens.length != amounts.length || tokens.length != accounts.length)
             revert RicReward__ArrayMismatch();
 
-        for (uint256 i = 0; i < tokens.length; ++i) {
+        for (uint256 i = 0; i < tokens.length; ) {
             _withdraw(tokens[i], accounts[i], amounts[i]);
+
+            // array should never be of length greater than (2**256 - 1)
+            unchecked { ++i; }
         }
     }
 
