@@ -8,9 +8,6 @@ import {
 import {
     IConstantFlowAgreementV1
 } from "@superfluid-finance/ethereum-contracts/contracts/interfaces/agreements/IConstantFlowAgreementV1.sol";
-import {
-    CFAv1Library
-} from "@superfluid-finance/ethereum-contracts/contracts/apps/CFAv1Library.sol";
 
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
@@ -37,13 +34,9 @@ contract RicReward is Ownable {
     /// @param amount Amount staked
     event StakeUpdate(address indexed token, address indexed staker, uint256 amount);
 
-    /// @dev Superfluid CFAv1 library for readability
-    using CFAv1Library for CFAv1Library.InitData;
-    CFAv1Library.InitData internal _cfaLib;
+    ISuperfluid internal immutable _host;
     IConstantFlowAgreementV1 internal immutable _cfa;
-
-    /// @dev Ricochet Token
-    ISuperToken internal _ric;
+    ISuperToken internal immutable _ric;
 
     /// @dev Internal accounting for deposits. `deposit = _deposits[account][token]`
     mapping(address => mapping(IERC20 => uint256)) internal _deposits;
@@ -55,7 +48,7 @@ contract RicReward is Ownable {
     uint256 public constant flowRateDepositRatio = 2;
 
     constructor(ISuperfluid host, IConstantFlowAgreementV1 cfa, ISuperToken ric) {
-        _cfaLib = CFAv1Library.InitData(host, cfa);
+        _host = host;
 
         _cfa = cfa;
 
@@ -81,7 +74,7 @@ contract RicReward is Ownable {
 
         _deposits[msg.sender][token] = senderDeposit + amount;
 
-        _cfaLib.flow(msg.sender, _ric, _flowRate(senderDeposit));
+        _flowUpdate(msg.sender, _flowRate(senderDeposit));
         
         emit StakeUpdate(address(token), msg.sender, amount);
     }
@@ -159,9 +152,61 @@ contract RicReward is Ownable {
         // only call `.flow` if the flow exists. Ensures liquidations do not stop withdrawals.
         (, int96 flowRate, , ) = _cfa.getFlow(_ric, address(this), account);
 
-        if (flowRate > 0) _cfaLib.flow(account, _ric, _flowRate(newDeposit));
+        if (flowRate > 0) _flowUpdate(account, _flowRate(newDeposit));
 
         emit StakeUpdate(address(token), account, newDeposit);
+    }
+
+    function _flowUpdate(address receiver, int96 newFlowRate) internal {
+        (, int96 oldFlowRate, , ) = _cfa.getFlow(_ric, address(this), receiver);
+
+        bytes memory agreementData;
+
+        if (oldFlowRate == 0) {
+
+            // if old AND new flow rates are zero, then the caller is likely trying to recover
+            // tokens. DO NOT revert.
+            if (newFlowRate == 0) return;
+
+            // create flow
+            agreementData = abi.encodeWithSelector(
+                IConstantFlowAgreementV1.createFlow.selector,
+                _ric,
+                receiver,
+                newFlowRate,
+                new bytes(0)
+            );
+
+        } else if (newFlowRate > 0) {
+
+            // update flow
+            agreementData = abi.encodeWithSelector(
+                IConstantFlowAgreementV1.updateFlow.selector,
+                _ric,
+                receiver,
+                newFlowRate,
+                new bytes(0)
+            );
+
+        } else /* if (newFlowRate == 0) */ {
+
+            // delete flow
+            agreementData = abi.encodeWithSelector(
+                IConstantFlowAgreementV1.deleteFlow.selector,
+                _ric,
+                address(this),
+                receiver,
+                new bytes(0)
+            );
+
+        }
+
+        // call agreement
+        _host.callAgreement(
+            _cfa, 
+            agreementData, 
+            new bytes(0)
+        );
     }
 
     /// @dev Convenience function to abstract away numeric type casting hell.
