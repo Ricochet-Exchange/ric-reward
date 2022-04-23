@@ -157,6 +157,16 @@ contract RicReward is Ownable {
         emit StakeUpdate(address(token), account, newDeposit);
     }
 
+    /// @dev Convenience function to abstract away numeric type casting hell.
+    /// @param amount Amount to adjust
+    // TODO double check this
+    function _flowRate(uint256 amount) internal pure returns (int96) {
+        return int96(int256((amount * flowRateDepositRatio / 100) / 30 days));
+    }
+
+    /// @dev Calls appropriate agreement based on old flow rate and desired new flow rate
+    /// @param receiver Receiver of stream
+    /// @param newFlowRate Desired new flow rate
     function _flowUpdate(address receiver, int96 newFlowRate) internal {
         (, int96 oldFlowRate, , ) = _cfa.getFlow(_ric, address(this), receiver);
 
@@ -207,11 +217,5 @@ contract RicReward is Ownable {
             agreementData, 
             new bytes(0)
         );
-    }
-
-    /// @dev Convenience function to abstract away numeric type casting hell.
-    // TODO double check this
-    function _flowRate(uint256 amount) internal pure returns (int96) {
-        return int96(int256((amount * flowRateDepositRatio / 100) / 30 days));
     }
 }
