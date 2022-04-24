@@ -38,8 +38,8 @@ contract RicReward is Ownable {
     IConstantFlowAgreementV1 internal immutable _cfa;
     ISuperToken internal immutable _ric;
 
-    /// @dev Internal accounting for deposits. `deposit = _deposits[account][token]`
-    mapping(address => mapping(IERC20 => uint256)) internal _deposits;
+    /// @dev Internal accounting for deposits. `deposit = deposits[account][token]`
+    mapping(address => mapping(IERC20 => uint256)) public deposits;
 
     /// @dev Tokens available for rewards
     mapping(IERC20 => bool) public rewardActive;
@@ -70,12 +70,13 @@ contract RicReward is Ownable {
 
         token.transferFrom(msg.sender, address(this), amount);
 
-        uint256 senderDeposit = _deposits[msg.sender][token];
+        uint256 senderDeposit = deposits[msg.sender][token] + amount;
 
-        _deposits[msg.sender][token] = senderDeposit + amount;
+        deposits[msg.sender][token] = senderDeposit;
 
+        // TODO check if super app can attack with reentrancy
         _flowUpdate(msg.sender, _flowRate(senderDeposit));
-        
+
         emit StakeUpdate(address(token), msg.sender, amount);
     }
 
@@ -143,11 +144,11 @@ contract RicReward is Ownable {
     /// @param account Address to withdraw for
     /// @param amount Amount to withdraw
     function _withdraw(IERC20 token, address account, uint256 amount) internal {
-        uint256 newDeposit = _deposits[account][token] - amount;       
+        uint256 newDeposit = deposits[account][token] - amount;       
 
-        _deposits[account][token] = newDeposit;
+        deposits[account][token] = newDeposit;
 
-        token.transfer(account, newDeposit);
+        token.transfer(account, amount);
 
         // only call `.flow` if the flow exists. Ensures liquidations do not stop withdrawals.
         (, int96 flowRate, , ) = _cfa.getFlow(_ric, address(this), account);
@@ -159,7 +160,6 @@ contract RicReward is Ownable {
 
     /// @dev Convenience function to abstract away numeric type casting hell.
     /// @param amount Amount to adjust
-    // TODO double check this
     function _flowRate(uint256 amount) internal pure returns (int96) {
         return int96(int256((amount * flowRateDepositRatio / 100) / 30 days));
     }
@@ -213,8 +213,8 @@ contract RicReward is Ownable {
 
         // call agreement
         _host.callAgreement(
-            _cfa, 
-            agreementData, 
+            _cfa,
+            agreementData,
             new bytes(0)
         );
     }

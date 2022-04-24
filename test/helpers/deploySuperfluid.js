@@ -8,6 +8,8 @@ const ConstantFlowAgreementV1 = require('@superfluid-finance/ethereum-contracts/
 const SlotsBitmapLibrary = require('@superfluid-finance/ethereum-contracts/build/contracts/SlotsBitmapLibrary.json')
 const SuperTokenFactoryHelper = require('@superfluid-finance/ethereum-contracts/build/contracts/SuperTokenFactoryHelper.json')
 const SuperTokenFactory = require('@superfluid-finance/ethereum-contracts/build/contracts/SuperTokenFactory.json')
+const NativeSuperTokenProxy = require('@superfluid-finance/ethereum-contracts/build/contracts/NativeSuperTokenProxy.json')
+const ISuperToken = require('@superfluid-finance/ethereum-contracts/build/contracts/ISuperToken.json')
 
 // const contract = await deploy(Contract.abi, Contract.bytecode, signer, [arg0, arg1])
 async function deploy(abi, bytecode, signer, constructorArgs = []) {
@@ -36,19 +38,12 @@ async function deploySuperfluid(deployer) {
 	// STEP 3
 	// Deploy Governance
 	console.log('STEP 03: Deploy Governance')
-	const governance = await deploy(
-		TestGovernance.abi,
-		TestGovernance.bytecode,
-		deployer,
-		[]
-	)
+	const governance = await deploy(TestGovernance.abi, TestGovernance.bytecode, deployer, [])
 
 	// STEP 4
 	// Register Governance with Resolver
 	console.log('STEP 04: Register Governance with Resolver')
-	await resolver
-		.connect(deployer)
-		.set('TestGovernance.test', governance.address)
+	await resolver.connect(deployer).set('TestGovernance.test', governance.address)
 
 	// STEP 5
 	// Deploy Superfluid Loader
@@ -63,17 +58,12 @@ async function deploySuperfluid(deployer) {
 	// STEP 6
 	// Register Loader with Resolver
 	console.log('STEP 06: Register Loader with Resolver')
-	await resolver
-		.connect(deployer)
-		.set('SuperfluidLoader-v1', superfluidLoader.address)
+	await resolver.connect(deployer).set('SuperfluidLoader-v1', superfluidLoader.address)
 
 	// STEP 7
 	// Deploy and initialize Superfluid contract
 	console.log('STEP 07: Deploy and initialize Superfluid (host)')
-	const host = await deploy(Superfluid.abi, Superfluid.bytecode, deployer, [
-		true,
-		false
-	])
+	const host = await deploy(Superfluid.abi, Superfluid.bytecode, deployer, [true, false])
 	await host.initialize(governance.address)
 
 	// STEP 8
@@ -105,9 +95,7 @@ async function deploySuperfluid(deployer) {
 	// STEP 11
 	// Register ConstantFlowAgreementV1 agreement class with Governance
 	console.log('STEP 11: Register ConstantFlowAgreementV1 with Governance')
-	await governance
-		.connect(deployer)
-		.registerAgreementClass(host.address, cfa.address)
+	await governance.connect(deployer).registerAgreementClass(host.address, cfa.address)
 
 	// STEP 12
 	// Deploy SlotsBitmapLibrary
@@ -122,21 +110,14 @@ async function deploySuperfluid(deployer) {
 	// STEP 13
 	// Deploy InstantDistributionAgreementV1
 	console.log('STEP 13: Deploy InstantDistributionAgreementV1')
-	const ida = await deployWithLibs(
-		'InstantDistributionAgreementV1',
-		deployer,
-		[host.address],
-		{ SlotsBitmapLibrary: slotsBitmapLibrary.address }
-	)
+	const ida = await deployWithLibs('InstantDistributionAgreementV1', deployer, [host.address], {
+		SlotsBitmapLibrary: slotsBitmapLibrary.address
+	})
 
 	// STEP 14
 	// Register InstantDistributionAgreementV1 agreement class with Governance
-	console.log(
-		'STEP 14: Register InstantDistributionAgreementV1 with Governance'
-	)
-	await governance
-		.connect(deployer)
-		.registerAgreementClass(host.address, ida.address)
+	console.log('STEP 14: Register InstantDistributionAgreementV1 with Governance')
+	await governance.connect(deployer).registerAgreementClass(host.address, ida.address)
 
 	// STEP 15
 	// Deploy SuperTokenFactoryHelper library
@@ -164,22 +145,36 @@ async function deploySuperfluid(deployer) {
 	console.log('STEP 17: Register SuperTokenFactory with Superfluid (host)')
 	await governance
 		.connect(deployer)
-		.updateContracts(
-			host.address,
-			ethers.constants.AddressZero,
-			[],
-			superTokenFactory.address
-		)
+		.updateContracts(host.address, ethers.constants.AddressZero, [], superTokenFactory.address)
 
-	// SANITY_CHECK.exe
-	// const superfluidLoaderAddress = await resolver.get('SuperfluidLoader-v1')
-	// console.log(superfluidLoaderAddress, superfluidLoader.address)
+	// STEP 18
+	// Deploy Ricochet Proxy
+	console.log('STEP 18: Deploy Ricochet Proxy')
+	const ricochetProxy = await deploy(
+		NativeSuperTokenProxy.abi,
+		NativeSuperTokenProxy.bytecode,
+		deployer,
+		[]
+	)
 
-	// const framework = await superfluidLoader.loadFramework('test')
+	// STEP 19
+	// Set Ricochet Implementation with Factory
+	console.log('STEP 19: Set Ricochet Implementation with Factory')
+	await superTokenFactory.connect(deployer).initializeCustomSuperToken(ricochetProxy.address)
 
-	// console.log(framework)
+	// STEP 20
+	// Initialize Ricochet
+	console.log('STEP 20: Initialize Ricochet')
+	await ricochetProxy
+		.connect(deployer)
+		.initialize('Ricochet', 'RIC', ethers.utils.parseEther('10000000'))
 
-	return resolver.address
+	const ricochet = await ethers.getContractAt(ISuperToken.abi, ricochetProxy.address)
+
+	// ???
+	// PROFIT
+
+	return [resolver.address, ricochet]
 }
 
-module.exports = deploySuperfluid
+module.exports = { deploySuperfluid, deploy }
