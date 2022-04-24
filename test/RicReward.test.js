@@ -3,8 +3,7 @@ const { assert } = require('chai')
 const { ethers, network } = require('hardhat')
 const { deploySuperfluid, deploy } = require('./helpers/deploySuperfluid')
 
-let deployer, alice, bob, sf, ricochet, resolverAddress, ricReward, lpToken0, lpToken1
-
+// CONSTANTS
 const stakeUpdateEvent = ethers.utils.keccak256(
 	ethers.utils.toUtf8Bytes('StakeUpdate(address,address,uint256)')
 )
@@ -14,6 +13,10 @@ const rewardUpdateEvent = ethers.utils.keccak256(
 const flowRateDepositRatio = '2'
 const thirtyDays = '2592000' // in seconds
 
+// VARIABLES ASSIGNED IN HOOKS
+let deployer, alice, bob, sf, ricochet, resolverAddress, ricReward, lpToken0, lpToken1
+
+// SIMPLE HELPERS
 const getBlockTimestamp = async provider =>
 	(await provider.getBlock(await provider.getBlockNumber())).timestamp * 1000
 
