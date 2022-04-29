@@ -147,9 +147,14 @@ async function deploySuperfluid(deployer) {
 		.connect(deployer)
 		.updateContracts(host.address, ethers.constants.AddressZero, [], superTokenFactory.address)
 
-	// STEP 18
+	// ???
+	// PROFIT
+
+	return [resolver.address, superTokenFactory]
+}
+
+async function deployRicochet(superTokenFactory, deployer) {
 	// Deploy Ricochet Proxy
-	console.log('STEP 18: Deploy Ricochet Proxy')
 	const ricochetProxy = await deploy(
 		NativeSuperTokenProxy.abi,
 		NativeSuperTokenProxy.bytecode,
@@ -157,24 +162,15 @@ async function deploySuperfluid(deployer) {
 		[]
 	)
 
-	// STEP 19
 	// Set Ricochet Implementation with Factory
-	console.log('STEP 19: Set Ricochet Implementation with Factory')
 	await superTokenFactory.connect(deployer).initializeCustomSuperToken(ricochetProxy.address)
 
-	// STEP 20
 	// Initialize Ricochet
-	console.log('STEP 20: Initialize Ricochet')
 	await ricochetProxy
 		.connect(deployer)
 		.initialize('Ricochet', 'RIC', ethers.utils.parseEther('10000000'))
 
-	const ricochet = await ethers.getContractAt(ISuperToken.abi, ricochetProxy.address)
-
-	// ???
-	// PROFIT
-
-	return [resolver.address, ricochet]
+	return await ethers.getContractAt(ISuperToken.abi, ricochetProxy.address)
 }
 
-module.exports = { deploySuperfluid, deploy }
+module.exports = { deploySuperfluid, deployRicochet }

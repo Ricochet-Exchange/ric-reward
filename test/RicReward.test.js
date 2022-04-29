@@ -1,7 +1,7 @@
 const { Framework } = require('@superfluid-finance/sdk-core')
-const { assert } = require('chai')
+const { assert, expect } = require('chai')
 const { ethers, network } = require('hardhat')
-const { deploySuperfluid, deploy } = require('./helpers/deploySuperfluid')
+const { deploySuperfluid, deployRicochet } = require('./helpers/deployers')
 
 // CONSTANTS
 const stakeUpdateEvent = ethers.utils.keccak256(
@@ -10,11 +10,24 @@ const stakeUpdateEvent = ethers.utils.keccak256(
 const rewardUpdateEvent = ethers.utils.keccak256(
 	ethers.utils.toUtf8Bytes('RewardUpdate(address,bool)')
 )
+const ten = ethers.utils.parseEther('10').toString()
+const five = ethers.utils.parseEther('5').toString()
 const flowRateDepositRatio = '2'
 const thirtyDays = '2592000' // in seconds
+const overOrUnderFlow = '0x11' // EVM panic code
 
 // VARIABLES ASSIGNED IN HOOKS
-let deployer, alice, bob, sf, ricochet, resolverAddress, ricReward, lpToken0, lpToken1
+let deployer,
+	alice,
+	bob,
+	sf,
+	superTokenFactory,
+	ricochet,
+	resolverAddress,
+	ricReward,
+	lpToken0,
+	lpToken1,
+	invalidLpToken
 
 // SIMPLE HELPERS
 const getBlockTimestamp = async provider =>
@@ -33,7 +46,7 @@ before(async function () {
 	;[deployer, alice, bob] = await ethers.getSigners()
 
 	// deploy superfluid contracts and ricochet token
-	;[resolverAddress, ricochet] = await deploySuperfluid(deployer)
+	;[resolverAddress, superTokenFactory] = await deploySuperfluid(deployer)
 
 	// init client framework
 	sf = await Framework.create({
@@ -46,6 +59,9 @@ before(async function () {
 })
 
 beforeEach(async function () {
+	// deploy Ricochet token each time since total supply is hard coded
+	ricochet = await deployRicochet(superTokenFactory, deployer)
+
 	// deploy contract
 	const RicRewardFactory = await ethers.getContractFactory('RicReward', deployer)
 
@@ -61,6 +77,8 @@ beforeEach(async function () {
 	lpToken0 = await ERC20MockFactory.deploy('LP Token 0', 'LPT0')
 
 	lpToken1 = await ERC20MockFactory.deploy('LP Token 1', 'LPT1')
+
+	invalidLpToken = await ERC20MockFactory.deploy('Invalid LP Token', 'ILPT')
 
 	// register LP Tokens
 	await ricReward.connect(deployer).setRewardActive(lpToken0.address, true)
@@ -78,8 +96,8 @@ describe('State Getters', async function () {
 		assert.equal(await ricReward.rewardActive(lpToken1.address), true)
 	})
 
-	it('Shows Inactive Token to be Inactive', async function () {
-		assert.equal(await ricReward.rewardActive(ethers.constants.AddressZero), false)
+	it('Shows Invalid LP Token to be Inactive', async function () {
+		assert.equal(await ricReward.rewardActive(invalidLpToken.address), false)
 	})
 
 	it('Shows Flow Rate Deposit Ratio', async function () {
@@ -92,9 +110,7 @@ describe('State Getters', async function () {
 })
 
 describe('State Updatooors', async function () {
-	it('Can Deposit LP Token 0', async function () {
-		const ten = ethers.utils.parseEther('10').toString()
-
+	it('Can Deposit LP Tokens', async function () {
 		await lpToken0.connect(alice).mint(ten)
 		await lpToken0.connect(alice).approve(ricReward.address, ten)
 		const tx = await ricReward.connect(alice).deposit(lpToken0.address, ten)
@@ -116,9 +132,7 @@ describe('State Updatooors', async function () {
 		assert.equal(flowRate, computeFlowRate(ten))
 	})
 
-	it('Can Withdraw All of LP Token 0', async function () {
-		const ten = ethers.utils.parseEther('10').toString()
-
+	it('Can Withdraw All of LP Tokens', async function () {
 		await lpToken0.connect(alice).mint(ten)
 		await lpToken0.connect(alice).approve(ricReward.address, ten)
 		await ricReward.connect(alice).deposit(lpToken0.address, ten)
@@ -141,10 +155,7 @@ describe('State Updatooors', async function () {
 		assert.equal(flowRate.toString(), '0')
 	})
 
-	it('Can Withdraw Some of LP Token 0', async function () {
-		const ten = ethers.utils.parseEther('10').toString()
-		const five = ethers.utils.parseEther('5').toString()
-
+	it('Can Withdraw Some of LP Tokens', async function () {
 		await lpToken0.connect(alice).mint(ten)
 		await lpToken0.connect(alice).approve(ricReward.address, ten)
 		await ricReward.connect(alice).deposit(lpToken0.address, ten)
@@ -166,10 +177,66 @@ describe('State Updatooors', async function () {
 		assert.equal(Number(timestamp), await getBlockTimestamp(ethers.provider))
 		assert.equal(flowRate, computeFlowRate(five))
 	})
+
+	it('Can Withdraw LP Tokens While Rewards Inactive', async function () {
+		await lpToken0.connect(alice).mint(ten)
+		await lpToken0.connect(alice).approve(ricReward.address, ten)
+		await ricReward.connect(alice).deposit(lpToken0.address, ten)
+		await ricReward.connect(deployer).setRewardActive(lpToken0.address, false)
+		await ricReward.connect(alice).withdraw(lptoken0.address, ten)
+
+		assert.equal(await lpToken0.balanceOf)
+	})
+
+	it('Does NOT Update Deposits When Invalid Tokens Transferred', async function () {
+		await invalidLpToken.connect(alice).mint(ten)
+		await invalidLpToken.connect(alice).transfer(ricReward.address, ten)
+
+		assert.equal((await invalidLpToken.balanceOf(ricReward.address)).toString(), ten)
+		assert.equal(
+			(await ricReward.deposits(alice.address, invalidLpToken.address)).toString(),
+			'0'
+		)
+	})
 })
 
-// describe('Admin State Updates', async function () {
-// 	it('Can Withdraw For Another Address', async function () {
+describe('Admin State Updates', async function () {
+	it('Can Set Rewards Active for Any Token', async function () {
+		const tx = await ricReward.connect(deployer).setRewardActive(invalidLpToken.address, true)
 
-// 	})
-// })
+		const { logs } = await tx.wait()
+
+		assert(containsEvent(logs, rewardUpdateEvent))
+		assert(await ricReward.rewardActive(invalidLpToken.address))
+	})
+
+	it('Can Set Rewards Inactive', async function () {
+		await ricReward.connect(deployer).setRewardActive(lpToken0.address, false)
+
+		assert(!(await ricReward.rewardActive(lpToken0.address)))
+	})
+
+	it('Can Set Rewards Inactive, then Active again', async function () {
+		await ricReward.connect(deployer).setRewardActive(lpToken0.address, false)
+		await ricReward.connect(deployer).setRewardActive(lpToken0.address, true)
+
+		assert(await ricReward.rewardActive(lpToken0.address))
+	})
+})
+
+describe('Expected Revert Cases', async function () {
+	it('Cannot Deposit Inactive Token', async function () {
+		await invalidLpToken.connect(alice).mint(ten)
+		await invalidLpToken.connect(alice).approve(ricReward.address, ten)
+
+		await expect(
+			ricReward.connect(alice).deposit(invalidLpToken.address, ten)
+		).to.be.revertedWith('RicReward__RewardsInactive()')
+	})
+
+	it('Cannot Withdraw More Than Deposited', async function () {
+		await expect(ricReward.connect(alice).withdraw(lpToken0.address, '1')).to.be.revertedWith(
+			overOrUnderFlow
+		)
+	})
+})
