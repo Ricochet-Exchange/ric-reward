@@ -6,6 +6,7 @@ import {IConstantFlowAgreementV1} from "@superfluid-finance/ethereum-contracts/c
 
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
+import {ReentrancyGuard} from "@openzeppelin/contracts/security/ReentrancyGuard.sol";
 
 import {IRicReward} from "./interfaces/IRicReward.sol";
 
@@ -22,7 +23,7 @@ error RicReward__ArrayMismatch();
 /// @author Rex Force
 /// @notice Depositing relevant tokens here trigger a stream of Ricochet Tokens via the Superfluid
 /// protocol. Withdrawing the relevant tokens here will decrease or delete the stream as appropriate
-contract RicReward is IRicReward, Ownable {
+contract RicReward is IRicReward, Ownable, ReentrancyGuard {
 	/// @dev Emitted when a token is added or removed to or from the rewards program
 	/// @param token ERC20 token to be staked
 	event RewardUpdate(address indexed token, bool active);
@@ -67,7 +68,7 @@ contract RicReward is IRicReward, Ownable {
 	/// @param token Token to deposit
 	/// @param amount Amount to deposit
 	/// @dev Throws `RicReward__RewardsInactive` if token is inactive. Emits `StakeUpdate`
-	function deposit(IERC20 token, uint256 amount) external {
+	function deposit(IERC20 token, uint256 amount) external nonReentrant {
 		// Safe to assume all 'token's contain trusted code
 		if (!rewardActive[token]) revert RicReward__RewardsInactive();
 
@@ -77,7 +78,6 @@ contract RicReward is IRicReward, Ownable {
 
 		deposits[msg.sender][token] = senderDeposit;
 
-		// TODO check if super app can attack with reentrancy
 		_flowUpdate(msg.sender, _flowRate(senderDeposit));
 
 		emit StakeUpdate(address(token), msg.sender, amount);
@@ -88,7 +88,7 @@ contract RicReward is IRicReward, Ownable {
 	/// @param token Token to withdraw
 	/// @param amount Amount to withdraw
 	/// @dev Emits `StakeUpdate`
-	function withdraw(IERC20 token, uint256 amount) external {
+	function withdraw(IERC20 token, uint256 amount) external nonReentrant {
 		uint256 newDeposit = deposits[msg.sender][token] - amount;
 
 		deposits[msg.sender][token] = newDeposit;

@@ -183,9 +183,23 @@ describe('State Updatooors', async function () {
 		await lpToken0.connect(alice).approve(ricReward.address, ten)
 		await ricReward.connect(alice).deposit(lpToken0.address, ten)
 		await ricReward.connect(deployer).setRewardActive(lpToken0.address, false)
-		await ricReward.connect(alice).withdraw(lptoken0.address, ten)
+		const tx = await ricReward.connect(alice).withdraw(lpToken0.address, ten)
 
-		assert.equal(await lpToken0.balanceOf)
+		const { logs } = await tx.wait()
+
+		const { timestamp, flowRate } = await sf.cfaV1.getFlow({
+			superToken: ricochet.address,
+			sender: ricReward.address,
+			receiver: alice.address,
+			providerOrSigner: alice
+		})
+
+		assert(containsEvent(logs, stakeUpdateEvent))
+		assert.equal((await lpToken0.balanceOf(alice.address)).toString(), ten)
+		assert.equal((await lpToken0.balanceOf(ricReward.address)).toString(), '0')
+		assert.equal((await ricReward.deposits(alice.address, lpToken0.address)).toString(), '0')
+		assert.equal(Number(timestamp), 0)
+		assert.equal(flowRate.toString(), '0')
 	})
 
 	it('Does NOT Update Deposits When Invalid Tokens Transferred', async function () {
@@ -238,5 +252,41 @@ describe('Expected Revert Cases', async function () {
 		await expect(ricReward.connect(alice).withdraw(lpToken0.address, '1')).to.be.revertedWith(
 			overOrUnderFlow
 		)
+	})
+
+	it('Cannot Reenter', async function () {
+		const factory = await ethers.getContractFactory('SuperAppReentranceMock', deployer)
+		const maliciousSuperApp = await factory.deploy(
+			sf.settings.config.hostAddress,
+			sf.settings.config.cfaV1Address,
+			ricReward.address,
+			lpToken0.address
+		)
+
+		await lpToken0.connect(alice).mint(ten)
+		await lpToken0.connect(alice).transfer(maliciousSuperApp.address, ten)
+
+		await expect(maliciousSuperApp.connect(alice).attemptReentrancy()).to.be.revertedWith(
+			'ReentrancyGuard: reentrant call'
+		)
+	})
+
+	it('Cannot Change Rewards Status as Non Admin', async function () {
+		await expect(
+			ricReward.connect(alice).setRewardActive(lpToken0.address, false)
+		).to.be.revertedWith('Ownable: caller is not the owner')
+	})
+})
+
+describe('End To End Tests', async function () {
+	it('Scenario 1', async function () {
+		// alice deposit 0
+		// bob deposit invalid
+		// alice deposit 1
+		// bob deposit 0
+		// alice withdraw 0 half
+		// bob withdraw
+		// deployer sets inactive
+		// alice withdraw
 	})
 })

@@ -35,7 +35,7 @@ contract SuperAppReentranceMock is SuperAppBase {
 
         uint256 configWord = SuperAppDefinitions.APP_LEVEL_FINAL
             | SuperAppDefinitions.BEFORE_AGREEMENT_CREATED_NOOP
-            | SuperAppDefinitions.AFTER_AGREEMENT_CREATED_NOOP
+            // | SuperAppDefinitions.AFTER_AGREEMENT_CREATED_NOOP
             | SuperAppDefinitions.BEFORE_AGREEMENT_UPDATED_NOOP
             | SuperAppDefinitions.AFTER_AGREEMENT_UPDATED_NOOP
             | SuperAppDefinitions.BEFORE_AGREEMENT_TERMINATED_NOOP
@@ -44,8 +44,9 @@ contract SuperAppReentranceMock is SuperAppBase {
         host.registerApp(configWord);
     }
 
-    function deposit(uint256 amount) external {
-        _ricReward.deposit(_lpToken, amount);
+    function attemptReentrancy() external {
+        _lpToken.approve(address(_ricReward), 10e18);
+        _ricReward.deposit(_lpToken, 10e18);
     }
 
     function afterAgreementCreated(
@@ -56,7 +57,7 @@ contract SuperAppReentranceMock is SuperAppBase {
         bytes calldata,
         bytes calldata ctx
     ) external override returns (bytes memory) {
-        _ricReward.deposit(_lpToken, 1);
+        _ricReward.withdraw(_lpToken, 10e18);
 
         return ctx;
     }
