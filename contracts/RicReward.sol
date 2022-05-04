@@ -38,8 +38,11 @@ contract RicReward is IRicReward, Ownable, ReentrancyGuard {
 	IConstantFlowAgreementV1 internal immutable _cfa;
 	ISuperToken internal immutable _ric;
 
-	/// @dev Internal accounting for deposits. `deposit = deposits[account][token]`
+	/// @dev Accounting for deposits. `deposit = deposits[account][token]`
 	mapping(address => mapping(IERC20 => uint256)) public deposits;
+
+	/// @dev Internal accounting for flowRate computation. `totalDeposit = totalDeposits[account]`
+	mapping(address => uint256) internal _totalDeposits;
 
 	/// @dev Tokens available for rewards
 	mapping(IERC20 => bool) public rewardActive;
@@ -74,11 +77,13 @@ contract RicReward is IRicReward, Ownable, ReentrancyGuard {
 
 		token.transferFrom(msg.sender, address(this), amount);
 
-		uint256 senderDeposit = deposits[msg.sender][token] + amount;
+		deposits[msg.sender][token] += amount;
 
-		deposits[msg.sender][token] = senderDeposit;
+		uint256 totalDeposit = _totalDeposits[msg.sender] + amount;
 
-		_flowUpdate(msg.sender, _flowRate(senderDeposit));
+		_totalDeposits[msg.sender] = totalDeposit;
+
+		_flowUpdate(msg.sender, _flowRate(totalDeposit));
 
 		emit StakeUpdate(address(token), msg.sender, amount);
 	}
@@ -89,16 +94,18 @@ contract RicReward is IRicReward, Ownable, ReentrancyGuard {
 	/// @param amount Amount to withdraw
 	/// @dev Emits `StakeUpdate`
 	function withdraw(IERC20 token, uint256 amount) external nonReentrant {
-		uint256 newDeposit = deposits[msg.sender][token] - amount;
+		uint256 totalDeposit = _totalDeposits[msg.sender] - amount;
 
-		deposits[msg.sender][token] = newDeposit;
+		_totalDeposits[msg.sender] = totalDeposit;
+
+		deposits[msg.sender][token] -= amount;
 
 		// only call `.flow` if the flow exists. Ensures liquidations do not stop withdrawals.
 		(, int96 flowRate, , ) = _cfa.getFlow(_ric, address(this), msg.sender);
 
-		if (flowRate > 0) _flowUpdate(msg.sender, _flowRate(newDeposit));
+		if (flowRate > 0) _flowUpdate(msg.sender, _flowRate(totalDeposit));
 
-		emit StakeUpdate(address(token), msg.sender, newDeposit);
+		emit StakeUpdate(address(token), msg.sender, amount);
 
 		token.transfer(msg.sender, amount);
 	}

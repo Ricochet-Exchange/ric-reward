@@ -202,6 +202,32 @@ describe('State Updatooors', async function () {
 		assert.equal(flowRate.toString(), '0')
 	})
 
+	it('Can Deposit Two Different LP Tokens', async function () {
+		await lpToken0.connect(alice).mint(ten)
+		await lpToken0.connect(alice).approve(ricReward.address, ten)
+		await ricReward.connect(alice).deposit(lpToken0.address, ten)
+		await lpToken1.connect(alice).mint(five)
+		await lpToken1.connect(alice).approve(ricReward.address, five)
+		await ricReward.connect(alice).deposit(lpToken1.address, five)
+
+		assert.equal((await lpToken0.balanceOf(alice.address)).toString(), '0')
+		assert.equal((await lpToken0.balanceOf(ricReward.address)).toString(), ten)
+		assert.equal((await ricReward.deposits(alice.address, lpToken0.address)).toString(), ten)
+		assert.equal((await lpToken1.balanceOf(alice.address)).toString(), '0')
+		assert.equal((await lpToken1.balanceOf(ricReward.address)).toString(), five)
+		assert.equal((await ricReward.deposits(alice.address, lpToken1.address)).toString(), five)
+
+		const { timestamp, flowRate } = await sf.cfaV1.getFlow({
+			superToken: ricochet.address,
+			sender: ricReward.address,
+			receiver: alice.address,
+			providerOrSigner: alice
+		})
+
+		assert.equal(Number(timestamp), await getBlockTimestamp(ethers.provider))
+		assert.equal(flowRate.toString(), computeFlowRate(ethers.utils.parseEther('15')))
+	})
+
 	it('Does NOT Update Deposits When Invalid Tokens Transferred', async function () {
 		await invalidLpToken.connect(alice).mint(ten)
 		await invalidLpToken.connect(alice).transfer(ricReward.address, ten)
@@ -281,12 +307,148 @@ describe('Expected Revert Cases', async function () {
 describe('End To End Tests', async function () {
 	it('Scenario 1', async function () {
 		// alice deposit 0
+		await lpToken0.connect(alice).mint(ten)
+		await lpToken0.connect(alice).approve(ricReward.address, ten)
+		await ricReward.connect(alice).deposit(lpToken0.address, ten)
+
+		assert.equal((await ricReward.deposits(alice.address, lpToken0.address)).toString(), ten)
+		assert.equal(
+			(
+				await sf.cfaV1.getFlow({
+					superToken: ricochet.address,
+					sender: ricReward.address,
+					receiver: alice.address,
+					providerOrSigner: alice
+				})
+			).flowRate.toString(),
+			computeFlowRate(ten)
+		)
+
 		// bob deposit invalid
+		await invalidLpToken.connect(bob).mint(ten)
+		await invalidLpToken.connect(bob).approve(ricReward.address, ten)
+		await expect(
+			ricReward.connect(bob).deposit(invalidLpToken.address, ten)
+		).to.be.revertedWith('RicReward__RewardsInactive()')
+
+		assert.equal(
+			(await ricReward.deposits(bob.address, invalidLpToken.address)).toString(),
+			'0'
+		)
+		assert.equal(
+			(
+				await sf.cfaV1.getFlow({
+					superToken: ricochet.address,
+					sender: ricReward.address,
+					receiver: bob.address,
+					providerOrSigner: bob
+				})
+			).flowRate.toString(),
+			'0'
+		)
+
 		// alice deposit 1
+		await lpToken1.connect(alice).mint(five)
+		await lpToken1.connect(alice).approve(ricReward.address, five)
+		await ricReward.connect(alice).deposit(lpToken1.address, five)
+
+		assert.equal((await ricReward.deposits(alice.address, lpToken1.address)).toString(), five)
+		assert.equal(
+			(
+				await sf.cfaV1.getFlow({
+					superToken: ricochet.address,
+					sender: ricReward.address,
+					receiver: alice.address,
+					providerOrSigner: alice
+				})
+			).flowRate.toString(),
+			computeFlowRate(ethers.utils.parseEther('15').toString())
+		)
+
 		// bob deposit 0
+		await lpToken0.connect(bob).mint(ten)
+		await lpToken0.connect(bob).approve(ricReward.address, ten)
+		await ricReward.connect(bob).deposit(lpToken0.address, ten)
+
+		assert.equal((await ricReward.deposits(bob.address, lpToken0.address)).toString(), ten)
+		assert.equal(
+			(
+				await sf.cfaV1.getFlow({
+					superToken: ricochet.address,
+					sender: ricReward.address,
+					receiver: bob.address,
+					providerOrSigner: bob
+				})
+			).flowRate.toString(),
+			computeFlowRate(ten)
+		)
+
+		// alice withdraw 1
+		await ricReward.connect(alice).withdraw(lpToken1.address, five)
+
+		assert.equal((await ricReward.deposits(alice.address, lpToken1.address)).toString(), '0')
+		assert.equal(
+			(
+				await sf.cfaV1.getFlow({
+					superToken: ricochet.address,
+					sender: ricReward.address,
+					receiver: alice.address,
+					providerOrSigner: alice
+				})
+			).flowRate.toString(),
+			computeFlowRate(ten)
+		)
+
 		// alice withdraw 0 half
+		await ricReward.connect(alice).withdraw(lpToken0.address, five)
+
+		assert.equal((await ricReward.deposits(alice.address, lpToken0.address)).toString(), five)
+		assert.equal(
+			(
+				await sf.cfaV1.getFlow({
+					superToken: ricochet.address,
+					sender: ricReward.address,
+					receiver: alice.address,
+					providerOrSigner: alice
+				})
+			).flowRate.toString(),
+			computeFlowRate(five)
+		)
+
 		// bob withdraw
+		await ricReward.connect(bob).withdraw(lpToken0.address, ten)
+
+		assert.equal((await ricReward.deposits(bob.address, lpToken0.address)).toString(), '0')
+		assert.equal(
+			(
+				await sf.cfaV1.getFlow({
+					superToken: ricochet.address,
+					sender: ricReward.address,
+					receiver: bob.address,
+					providerOrSigner: bob
+				})
+			).flowRate.toString(),
+			computeFlowRate('0')
+		)
+
 		// deployer sets inactive
+		await ricReward.connect(deployer).setRewardActive(lpToken0.address, false)
+		await ricReward.connect(deployer).setRewardActive(lpToken1.address, false)
+
 		// alice withdraw
+		await ricReward.connect(alice).withdraw(lpToken0.address, five)
+
+		assert.equal((await ricReward.deposits(alice.address, lpToken0.address)).toString(), '0')
+		assert.equal(
+			(
+				await sf.cfaV1.getFlow({
+					superToken: ricochet.address,
+					sender: ricReward.address,
+					receiver: alice.address,
+					providerOrSigner: alice
+				})
+			).flowRate.toString(),
+			computeFlowRate('0')
+		)
 	})
 })
