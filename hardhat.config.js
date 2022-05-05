@@ -2,6 +2,7 @@ require('@nomiclabs/hardhat-waffle')
 require('@nomiclabs/hardhat-ethers')
 require('hardhat-erc1820')
 require('solidity-coverage')
+require('hardhat-gas-reporter')
 
 module.exports = {
 	solidity: {

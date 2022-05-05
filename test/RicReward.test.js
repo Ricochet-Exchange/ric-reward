@@ -202,6 +202,35 @@ describe('State Updatooors', async function () {
 		assert.equal(flowRate.toString(), '0')
 	})
 
+	it('Can Withdraw LP Tokens Without an Existing Flow', async function () {
+		await lpToken0.connect(alice).mint(ten)
+		await lpToken0.connect(alice).approve(ricReward.address, ten)
+		await ricReward.connect(alice).deposit(lpToken0.address, ten)
+		await sf.cfaV1
+			.deleteFlow({
+				sender: ricReward.address,
+				receiver: alice.address,
+				superToken: ricochet.address
+			})
+			.exec(alice)
+
+		// pulse check
+		const { timestamp, flowRate } = await sf.cfaV1.getFlow({
+			superToken: ricochet.address,
+			sender: ricReward.address,
+			receiver: alice.address,
+			providerOrSigner: alice
+		})
+		assert.equal(Number(timestamp), 0)
+		assert.equal(flowRate.toString(), '0')
+
+		await ricReward.connect(alice).withdraw(lpToken0.address, ten)
+
+		assert.equal((await lpToken0.balanceOf(alice.address)).toString(), ten)
+		assert.equal((await lpToken0.balanceOf(ricReward.address)).toString(), '0')
+		assert.equal((await ricReward.deposits(alice.address, lpToken0.address)).toString(), '0')
+	})
+
 	it('Can Deposit Two Different LP Tokens', async function () {
 		await lpToken0.connect(alice).mint(ten)
 		await lpToken0.connect(alice).approve(ricReward.address, ten)
