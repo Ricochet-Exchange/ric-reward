@@ -1,11 +1,29 @@
 # RicReward, A Ricochet super token liquidity staking contract
 
-__STATUS:__ In Development
+**STATUS:** Under Review
 
 ## Overview
 
 The system consists of a single contract, `RicReward.sol`, using the Ricochet Token, liquidity
 tokens from Sushi, and the Superfluid protocol to enable a novel liquidity staking protocol.
+
+## Deposit / Withdrawal Pattern
+
+For depositing, the `approve` and `transferFrom` method is implemented, since LP tokens will be
+ERC20 tokens, not ERC777. Note that only tokens that are explicitly enabled can be deposited with
+the `deposit` function. Tokens can still be `transfer`ed to the contract, and in the interest of
+security, no recovery method will be available.
+
+For withdrawing, the tokens are moved via `transfer` to the caller. If the caller does not have a
+sufficient deposit amount, the contract will revert before this transfer occurs.
+
+## ReentrancyGuard
+
+The `RicReward` contract inherits the Open Zeppelin `ReentrancyGuard` contract for reentrancy
+protection. While the `token` to be transferred can be reasonably assumed to be safe code, however,
+a Super App could potentially reenter the contract on either of the public state-mutating functions.
+While no breaking exploits were found for the current implementation, a `nonReentrant` modifier has
+been added to the `deposit` and `withdraw` functions in the interest of security.
 
 ## Ownable
 
@@ -18,15 +36,6 @@ documentation in the source file.
 The owner may:
 
 -   Call `setRewardActive`, which adds or removes a token to or from the rewards list.
-
--   Call `withdrawFor`, which withdraws a token on another account's behalf and updates their flow.
-
--   Call `batchWithdrawFor`, which does the same as `withdrawFor`, but in batch.
-
-The last two, `withdrawFor` and `batchWithdrawFor` are to be used _only_ in emergencies, for example
-if liquidity tokens need to be withdrawn immediately and the user cannot be reached, or if invalid
-tokens are sent to the contract that need to be withdrawn immediately and the user cannot be
-reached.
 
 ## Superfluid Integration
 
@@ -42,5 +51,3 @@ decreased on the withdrawal.
 
 If a user deposits then withdraws all of the deposit, a flow is created on the deposit and deleted
 on the withdrawal.
-
-The `CFAv1Library` is used to keep the flow updates simple for readability.
