@@ -2,6 +2,32 @@
 
 **STATUS:** Under Review
 
+## Getting Started
+
+Clone the repo:
+
+```bash
+git clone https://github.com/Ricochet-Exchange/ric-reward.git
+```
+
+Install dependencies:
+
+```bash
+yarn
+```
+
+Test with Gas Report:
+
+```bash
+yarn test
+```
+
+Test Coverage Report (note that the coverage will skew the gas report):
+
+```bash
+yarn coverage
+```
+
 ## Overview
 
 The system consists of a single contract, `RicReward.sol`, using the Ricochet Token, liquidity
