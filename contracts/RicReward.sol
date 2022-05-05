@@ -13,12 +13,6 @@ import {IRicReward} from "./interfaces/IRicReward.sol";
 /// @notice Thrown when rewards are not active for a given token
 error RicReward__RewardsInactive();
 
-/// @notice Thrown when rewards are active for a given token
-error RicReward__RewardsActive();
-
-/// @notice Thrown when `batchWithdrawFor` array lengths do not match
-error RicReward__ArrayMismatch();
-
 /// @title A Ricochet liquidity staking incentive contract
 /// @author Rex Force
 /// @notice Depositing relevant tokens here trigger a stream of Ricochet Tokens via the Superfluid
