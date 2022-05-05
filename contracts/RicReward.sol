@@ -147,32 +147,23 @@ contract RicReward is IRicReward, Ownable, ReentrancyGuard {
 			if (newFlowRate == 0) return;
 
 			// create flow
-			agreementData = abi.encodeWithSelector(
-				_cfa.createFlow.selector,
-				_ric,
-				receiver,
-				newFlowRate,
-				new bytes(0)
+			agreementData = abi.encodeCall(
+				_cfa.createFlow,
+				(_ric, receiver, newFlowRate, new bytes(0))
 			);
 		} else if (newFlowRate > 0) {
 			// update flow
-			agreementData = abi.encodeWithSelector(
-				_cfa.updateFlow.selector,
-				_ric,
-				receiver,
-				newFlowRate,
-				new bytes(0)
+			agreementData = abi.encodeCall(
+				_cfa.updateFlow,
+				(_ric, receiver, newFlowRate, new bytes(0))
 			);
 		} else {
 			// newFlowRate == 0 && oldFlowRate > 0
 
 			// delete flow
-			agreementData = abi.encodeWithSelector(
-				_cfa.deleteFlow.selector,
-				_ric,
-				address(this),
-				receiver,
-				new bytes(0)
+			agreementData = abi.encodeCall(
+				_cfa.deleteFlow,
+				(_ric, address(this), receiver, new bytes(0))
 			);
 		}
 
