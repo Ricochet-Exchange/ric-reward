@@ -8,7 +8,7 @@ const ConstantFlowAgreementV1 = require('@superfluid-finance/ethereum-contracts/
 const SlotsBitmapLibrary = require('@superfluid-finance/ethereum-contracts/build/contracts/SlotsBitmapLibrary.json')
 const SuperTokenFactoryHelper = require('@superfluid-finance/ethereum-contracts/build/contracts/SuperTokenFactoryHelper.json')
 const SuperTokenFactory = require('@superfluid-finance/ethereum-contracts/build/contracts/SuperTokenFactory.json')
-const NativeSuperTokenProxy = require('@superfluid-finance/ethereum-contracts/build/contracts/NativeSuperTokenProxy.json')
+const PureSuperToken = require('@superfluid-finance/ethereum-contracts/build/contracts/PureSuperToken.json')
 const ISuperToken = require('@superfluid-finance/ethereum-contracts/build/contracts/ISuperToken.json')
 
 // const contract = await deploy(Contract.abi, Contract.bytecode, signer, [arg0, arg1])
@@ -139,12 +139,7 @@ async function deploySuperfluid(deployer) {
 
 async function deployRicochet(superTokenFactory, deployer) {
 	// Deploy Ricochet Proxy
-	const ricochetProxy = await deploy(
-		NativeSuperTokenProxy.abi,
-		NativeSuperTokenProxy.bytecode,
-		deployer,
-		[]
-	)
+	const ricochetProxy = await deploy(PureSuperToken.abi, PureSuperToken.bytecode, deployer, [])
 
 	// Set Ricochet Implementation with Factory
 	await superTokenFactory.connect(deployer).initializeCustomSuperToken(ricochetProxy.address)
