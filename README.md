@@ -66,7 +66,7 @@ The owner may:
 ## Superfluid Integration
 
 The Superfluid protocol is integrated in such a way that when an address's deposit is updated, a
-flow of Ricochet tokne worth 20% of the deposit is created, updated, or deleted.
+flow of Ricochet token worth 20% of the deposit is created, updated, or deleted.
 
 If a user makes a deposit, a flow is created.
 
